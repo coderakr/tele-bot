@@ -141,6 +141,30 @@ bot.catch((error) => {
 // Start Bot
 // =========================
 
-bot.start();
+const shutdown = (signal: string) => {
+    console.log(`Received ${signal}, stopping bot...`);
+    bot.stop();
+};
+
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+
+bot.start().catch((error: unknown) => {
+    const description =
+        error && typeof error === "object" && "description" in error
+            ? String(error.description)
+            : String(error);
+
+    if (description.includes("terminated by other getUpdates request")) {
+        console.error(
+            "Telegram polling conflict: another bot process is already using this token. " +
+            "Stop the other process or use a different bot token."
+        );
+    } else {
+        console.error("Failed to start the bot:", error);
+    }
+
+    process.exitCode = 1;
+});
 
 console.log("Bot is running...");
