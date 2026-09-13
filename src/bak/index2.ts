@@ -1,6 +1,5 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { Bot, InputFile } from "grammy";
 
 const token = process.env.BOT_TOKEN;
@@ -53,7 +52,7 @@ bot.use(async (ctx, next) => {
         );
 
         await ctx.reply(
-            `Too many requests.Please try again in ${remainingSeconds} s.`
+            `Too many requests. Please try again in ${remainingSeconds}s.`
         );
 
         return;
@@ -74,17 +73,12 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("id", async (ctx) => {
-    await ctx.reply(`Your user ID is: ${ctx.from?.id} `);
+    await ctx.reply(`Your user ID is: ${ctx.from?.id}`);
 });
 
 bot.command("help", async (ctx) => {
     await ctx.reply(
-        "Available commands:\n" +
-        "/start - Start the bot\n" +
-        "/id - Get your Telegram user ID\n" +
-        "/help - Show help\n" +
-        "/hello - Say hello\n" +
-        "/image - Get an image"
+        "Available commands:\n/start - Start the bot\n/help - Show help"
     );
 });
 
@@ -92,38 +86,18 @@ bot.command("hello", async (ctx) => {
     await ctx.reply("hii from ak");
 });
 
-// =========================
-// Image Command
-// =========================
-
 bot.command("image", async (ctx) => {
-    try {
-        const imagePath = path.join(
-            process.cwd(),
-            "public",
-            "image.png"
-        );
+    const image = await readFile(
+        new URL("./image.png", import.meta.url)
+    );
 
-        const image = await readFile(imagePath);
-
-        await ctx.replyWithPhoto(
-            new InputFile(image, "image.png")
-        );
-    } catch (error) {
-        console.error("Failed to send image:", error);
-
-        await ctx.reply(
-            "Sorry, I couldn't send the image right now."
-        );
-    }
+    await ctx.replyWithPhoto(
+        new InputFile(image, "image.png")
+    );
 });
 
-// =========================
-// Text Messages
-// =========================
-
 bot.on("message:text", async (ctx) => {
-    await ctx.reply(`You said: ${ctx.message.text} `);
+    await ctx.reply(`You said: ${ctx.message.text}`);
 });
 
 // =========================
@@ -131,15 +105,8 @@ bot.on("message:text", async (ctx) => {
 // =========================
 
 bot.catch((error) => {
-    console.error(
-        "Error while handling update:",
-        error.error
-    );
+    console.error("Error while handling update:", error.error);
 });
-
-// =========================
-// Start Bot
-// =========================
 
 bot.start();
 
