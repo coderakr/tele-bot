@@ -165,6 +165,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
+const KEEP_ALIVE_INTERVAL_MS = 10 * 60 * 1000;
+let keepAliveTimer: NodeJS.Timeout | undefined;
 
 server.listen(PORT, async () => {
     console.log(`Server listening on port ${PORT}`);
@@ -175,6 +177,25 @@ server.listen(PORT, async () => {
             const baseUrl = renderUrl.replace(/\/+$/, "");
             await bot.api.setWebhook(`${baseUrl}/webhook`);
             console.log(`Webhook set successfully to ${baseUrl}/webhook`);
+
+            const keepAlive = async () => {
+                try {
+                    const response = await fetch(`${baseUrl}/healthz`);
+                    if (!response.ok) {
+                        console.error(
+                            `Keep-alive request failed with status ${response.status}`
+                        );
+                    }
+                } catch (err) {
+                    console.error("Keep-alive request failed:", err);
+                }
+            };
+
+            keepAliveTimer = setInterval(() => {
+                void keepAlive();
+            }, KEEP_ALIVE_INTERVAL_MS);
+
+            console.log("Render keep-alive enabled (every 10 minutes)");
         } catch (err) {
             console.error("Failed to register webhook with Telegram:", err);
         }
@@ -184,6 +205,10 @@ server.listen(PORT, async () => {
 // Graceful Shutdown
 const shutdown = (signal: string) => {
     console.log(`Received ${signal}, shutting down HTTP server...`);
+    if (keepAliveTimer) {
+        clearInterval(keepAliveTimer);
+    }
+
     server.close(() => {
         console.log("Server stopped.");
         process.exit(0);
