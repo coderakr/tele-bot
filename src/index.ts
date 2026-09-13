@@ -13,7 +13,7 @@ const bot = new Bot(token);
 // Rate Limiter
 // =========================
 
-const WINDOW_MS = 10_000;
+const WINDOW_MS = 10_000; // 10 seconds
 const MAX_REQUESTS = 5;
 
 type RateLimitEntry = {
@@ -24,27 +24,42 @@ type RateLimitEntry = {
 const rateLimits = new Map<number, RateLimitEntry>();
 
 bot.use(async (ctx, next) => {
-    if (!ctx.from) return next();
+    // Only rate-limit users
+    if (!ctx.from) {
+        return next();
+    }
 
     const userId = ctx.from.id;
     const now = Date.now();
+
     const entry = rateLimits.get(userId);
 
+    // First request or previous window expired
     if (!entry || now >= entry.resetAt) {
         rateLimits.set(userId, {
             count: 1,
             resetAt: now + WINDOW_MS,
         });
+
         return next();
     }
 
+    // Rate limit exceeded
     if (entry.count >= MAX_REQUESTS) {
-        const remainingSeconds = Math.ceil((entry.resetAt - now) / 1000);
-        await ctx.reply(`Too many requests. Please try again in ${remainingSeconds} s.`);
+        const remainingSeconds = Math.ceil(
+            (entry.resetAt - now) / 1000
+        );
+
+        await ctx.reply(
+            `Too many requests. Please try again in ${remainingSeconds} s.`
+        );
+
         return;
     }
 
+    // Increment request count
     entry.count++;
+
     return next();
 });
 
@@ -81,12 +96,23 @@ bot.command("hello", async (ctx) => {
 
 bot.command("image", async (ctx) => {
     try {
-        const imagePath = path.join(process.cwd(), "public", "image.png");
+        const imagePath = path.join(
+            process.cwd(),
+            "public",
+            "image.png"
+        );
+
         const image = await readFile(imagePath);
-        await ctx.replyWithPhoto(new InputFile(image, "image.png"));
+
+        await ctx.replyWithPhoto(
+            new InputFile(image, "image.png")
+        );
     } catch (error) {
         console.error("Failed to send image:", error);
-        await ctx.reply("Sorry, I couldn't send the image right now.");
+
+        await ctx.reply(
+            "Sorry, I couldn't send the image right now."
+        );
     }
 });
 
@@ -103,7 +129,10 @@ bot.on("message:text", async (ctx) => {
 // =========================
 
 bot.catch((error) => {
-    console.error("Error while handling update:", error.error);
+    console.error(
+        "Error while handling update:",
+        error.error
+    );
 });
 
 // =========================
@@ -113,14 +142,26 @@ bot.catch((error) => {
 const handleUpdate = webhookCallback(bot, "http");
 
 const server = http.createServer(async (req, res) => {
-    // Basic health-check endpoint for Render
-    if (req.method === "GET" && req.url === "/") {
+    // 1. Health checks for Render (handles root GET, HEAD, etc.)
+    if (req.url === "/" || req.url === "/healthz") {
         res.writeHead(200, { "Content-Type": "text/plain" });
-        return res.end("Bot is healthy and running!");
+        return res.end("OK");
     }
 
-    // Telegram webhook handler
-    return handleUpdate(req, res);
+    // 2. Only allow POST requests targeting /webhook to reach grammY
+    if (req.method === "POST" && req.url === "/webhook") {
+        try {
+            return await handleUpdate(req, res);
+        } catch (err) {
+            console.error("Webhook processing error:", err);
+            res.writeHead(500);
+            return res.end();
+        }
+    }
+
+    // 3. Fallback for unhandled paths or random scanner pings
+    res.writeHead(404);
+    res.end();
 });
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -131,8 +172,9 @@ server.listen(PORT, async () => {
     const renderUrl = process.env.RENDER_EXTERNAL_URL;
     if (renderUrl) {
         try {
-            await bot.api.setWebhook(`${renderUrl}/`);
-            console.log(`Webhook set successfully to ${renderUrl}`);
+            const baseUrl = renderUrl.replace(/\/+$/, "");
+            await bot.api.setWebhook(`${baseUrl}/webhook`);
+            console.log(`Webhook set successfully to ${baseUrl}/webhook`);
         } catch (err) {
             console.error("Failed to register webhook with Telegram:", err);
         }
